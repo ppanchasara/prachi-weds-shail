@@ -243,10 +243,6 @@
   .pseal i { display: inline-block; width: 1px; height: 1.1em; background: rgba(255,243,226,.75); margin: 0 .3em; }
   .envelope .ring { top: 73%; width: 21%; border-color: #b8642f; }
 
-  .stage.single .tabs, .stage.single .arrow, .stage.single .shufflehint { display: none; }
-  .stage.single .track { overflow: hidden; }
-  .stage.single .slide { padding: 10px 6px; }
-
   @media (prefers-reduced-motion: reduce) {
     .intro, .envelope, .slide img, .tab { transition: none; }
     .spark, .envelope .ring, .hint { animation: none; }
@@ -265,13 +261,16 @@
 <canvas id="petals" aria-hidden="true"></canvas>
 
 <main style="height:100%">
-  <section class="stage single" id="stage" aria-label="Invitation cards" inert>
+  <section class="stage shuffle" id="stage" aria-label="Invitation cards" inert>
     <div class="modes"><button class="back" id="back" type="button" aria-label="Back to the envelope" title="Back to the envelope"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg></button><button class="sound" id="sound" type="button" aria-pressed="true" aria-label="Mute music" title="Mute music"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path class="on" d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/><path class="off" d="M16 9.5l5 5M21 9.5l-5 5"/></svg></button></div>
     <nav class="tabs" id="tabs" aria-label="Invitation sections"></nav>
     <div class="viewport">
       <div class="track" id="track" tabindex="0" aria-label="Swipe through the invitation cards">
         <article class="slide" data-tab="Wedding" data-sub="25 Dec" data-where="Aarambh Party Plot, B/h Akshar Farm, Anand" data-q="Aarambh party plot Anand" data-ll="22.5459774,72.9492228" data-pid="ChIJVSWIbZpNXjkR03FnlwYd9Co">
           <img src="cards/wedding.jpg" alt="Mangal Parinay of Prachi and Shail, 25 December 2026. Jaan Aagman 5:00 pm, Hast Melap 6:00 pm, followed by dinner, at Aarambh Party Plot, behind Akshar Farm, Anand. No gifts, only blessings.">
+        </article>
+        <article class="slide" data-tab="Warm regards" data-sub="With love" data-where="" data-q="">
+          <img src="cards/regards.jpg" alt="Prachi weds Shail. Warm regards from Hansa and Yoginbhai Panchasara, Jagruti and Ar. Dhaval Panchasara, Hansu Associates, Anand.">
         </article>
       </div>
       <button class="arrow prev" id="prev" type="button" aria-label="Previous card">&#8249;</button>
@@ -308,7 +307,7 @@
   var slides = Array.prototype.slice.call(track.children);
   var tabs = [];
   var current = 0;
-  var mode = 'single';
+  var mode = 'shuffle';
 
   /* sparkles */
   var sky = document.getElementById('sky');

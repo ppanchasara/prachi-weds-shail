@@ -24,7 +24,7 @@
 <meta name="twitter:title" content="Prachi &amp; Shail | Wedding Invitation">
 <meta name="twitter:description" content="With joy in our hearts, we warmly request the honour of your presence as we celebrate the wedding of Prachi and Shail. Mangalik Avsaro on 24 December, Mangal Parinay on 25 December 2026, Anand.">
 <meta name="twitter:image" content="https://ppanchasara.github.io/prachi-weds-shail/grah-shanti-wedding/og-image.jpg">
-<link rel="preload" href="cards/cover.jpg" as="image">
+<link rel="preload" href="cards/cover-base.jpg" as="image">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}img{max-width:100%}[hidden]{display:none!important}</style>
 <style>
   /* Layout: her arched cover with a terracotta seal opens onto a stack of shuffling cards on warm parchment, with petals drifting down. */
@@ -43,6 +43,7 @@
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; }
+  html { overflow: hidden; overscroll-behavior: none; }   /* one-screen page: the tilted back card must not let the page wobble sideways */
   body {
     margin: 0;
     background: radial-gradient(120% 90% at 50% 0%, var(--ground) 0%, var(--ground-deep) 100%) var(--ground-deep);
@@ -232,6 +233,11 @@
   .tab[aria-current="true"], .go, .arrow:hover, .back:hover, .sound:hover { color: var(--on-accent); }
   .go:hover { background: var(--gold-soft); }
   .envelope { width: min(100%, 440px, calc((100vh - 190px) * .667)); width: min(100%, 440px, calc((100dvh - 190px) * .667)); }
+  /* title page: the brass bells on the garlands sway gently from where they hang */
+  .envelope { overflow: hidden; }
+  .envelope .bell { position: absolute; display: block; max-width: none; pointer-events: none;
+    transform-origin: var(--ox) var(--oy); animation: sway var(--dur) ease-in-out var(--delay) infinite alternate; will-change: transform; }
+  @keyframes sway { from { transform: rotate(var(--a0)); } to { transform: rotate(var(--a1)); } }
   .pseal {
     position: absolute; left: 50%; top: 73%; width: 21%; aspect-ratio: 1; translate: -50% -50%;
     border-radius: 50%; display: flex; align-items: center; justify-content: center;
@@ -242,6 +248,9 @@
   }
   .pseal i { display: inline-block; width: 1px; height: 1.1em; background: rgba(255,243,226,.75); margin: 0 .3em; }
   .envelope .ring { top: 73%; width: 21%; border-color: #b8642f; }
+  @media (prefers-reduced-motion: reduce) {
+    .envelope .bell { animation: none; }
+  }
 
   @media (prefers-reduced-motion: reduce) {
     .intro, .envelope, .slide img, .tab { transition: none; }
@@ -290,7 +299,13 @@
 <section class="intro" id="intro" aria-label="Wedding invitation cover">
   <p class="eyebrow">You are cordially invited</p>
   <button class="envelope" id="open" type="button" aria-label="Open the invitation">
-    <img src="cards/cover.jpg" alt="Prachi weds Shail, written inside a carved sandstone arch hung with brass bells">
+    <img src="cards/cover-base.jpg" alt="Prachi weds Shail, written inside a carved sandstone arch hung with garlands of brass bells">
+    <img class="bell" src="cards/bells/bell-l5.webp" alt="" style="left:-4.000%;top:15.879%;width:8.091%;height:34.727%;--ox:49.4%;--oy:0.5%;--a0:0.0deg;--a1:-1.5deg;--dur:3.65s;--delay:-0.55s">
+    <img class="bell" src="cards/bells/bell-r5.webp" alt="" style="left:95.909%;top:15.879%;width:8.273%;height:34.727%;--ox:49.5%;--oy:0.5%;--a0:0.0deg;--a1:1.5deg;--dur:4.11s;--delay:-0.30s">
+    <img class="bell" src="cards/bells/bell-l234.webp" alt="" style="left:1.455%;top:5.879%;width:10.091%;height:37.939%;--ox:48.6%;--oy:1.3%;--a0:0.0deg;--a1:-1.5deg;--dur:3.95s;--delay:-1.44s">
+    <img class="bell" src="cards/bells/bell-l1.webp" alt="" style="left:8.455%;top:5.576%;width:8.000%;height:19.818%;--ox:47.7%;--oy:0.9%;--a0:-1.4deg;--a1:1.4deg;--dur:3.28s;--delay:-1.66s">
+    <img class="bell" src="cards/bells/bell-r234.webp" alt="" style="left:88.455%;top:5.879%;width:10.091%;height:37.879%;--ox:50.5%;--oy:1.3%;--a0:-0.0deg;--a1:1.5deg;--dur:3.25s;--delay:-1.41s">
+    <img class="bell" src="cards/bells/bell-r1.webp" alt="" style="left:83.545%;top:5.576%;width:8.000%;height:19.758%;--ox:51.1%;--oy:0.9%;--a0:1.4deg;--a1:-1.4deg;--dur:3.30s;--delay:-0.30s">
   </button>
   <p class="hint">Tap the card to open</p>
 </section>

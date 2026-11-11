@@ -201,8 +201,9 @@
   .stage.shuffle.revealed .slide img, .stage.shuffle.revealed .slide.is-active img { opacity: 1; transform: none; transition-delay: 0s; }
   .stage.shuffle .slide.fly { animation: fly 1.2s cubic-bezier(.45,0,.25,1); }
   .stage.shuffle .slide.flyin { animation: flyin 1.2s cubic-bezier(.2,.8,.2,1); }
-  @keyframes fly { 0% { transform: none; z-index: 14; } 45% { transform: translateX(112%) rotate(11deg); z-index: 14; } 46% { z-index: 0; } 100% { z-index: 0; } }
+  @keyframes fly { 0% { transform: translateX(var(--dx, 0px)) rotate(var(--dr, 0deg)); z-index: 14; } 45% { transform: translateX(calc(112% * var(--fx, 1))) rotate(calc(11deg * var(--fx, 1))); z-index: 14; } 46% { z-index: 0; } 100% { z-index: 0; } }
   @keyframes flyin { 0% { transform: translateX(-112%) rotate(-11deg); z-index: 14; } 100% { z-index: 14; } }
+  .stage.shuffle.zoomed .track { touch-action: manipulation; cursor: auto; }
   .stage.shuffle .shufflehint { display: block; text-align: center; font-size: 12px; letter-spacing: .1em; color: var(--gold-soft); opacity: .8; margin: 0; }
 
   .modes { position: relative; min-height: 36px; }
@@ -385,7 +386,7 @@
   }
   var shuffleBusy = false;
   function step(dir) {
-    if (mode === 'shuffle') { if (shuffleBusy) return; shuffleBusy = true; setTimeout(function () { shuffleBusy = false; }, reduce ? 0 : 1100); var p = current; setActive((current + dir + slides.length) % slides.length, dir, p); }
+    if (mode === 'shuffle') { if (shuffleBusy) return; shuffleBusy = true; setTimeout(function () { shuffleBusy = false; }, reduce ? 0 : 550); var p = current; setActive((current + dir + slides.length) % slides.length, dir, p); }
     else goTo(current + dir);
   }
   var raf = 0;
@@ -413,7 +414,7 @@
 
   /* directions under each card (scroll view) */
   slides.forEach(function (s) {
-    s.addEventListener('animationend', function () { s.classList.remove('fly', 'flyin'); });
+    s.addEventListener('animationend', function () { s.classList.remove('fly', 'flyin'); s.style.removeProperty('--dx'); s.style.removeProperty('--dr'); s.style.removeProperty('--fx'); });
     if (!s.dataset.q) return;
     var d = document.createElement('div'); d.className = 'sdir';
     var p = document.createElement('p'); p.className = 'where'; p.textContent = s.dataset.where;
@@ -437,18 +438,61 @@
   }
   Object.keys(modeBtns).forEach(function (k) { modeBtns[k].addEventListener('click', function () { setMode(k); }); });
 
-  var px = null;
-  var fingers = 0, multi = false;
-  function zoomed() { return window.visualViewport && visualViewport.scale > 1.05; }
-  track.addEventListener('pointerdown', function (e) { fingers++; if (fingers > 1) multi = true; if (mode === 'shuffle') px = e.clientX; });
-  track.addEventListener('pointercancel', function () { px = null; fingers = Math.max(0, fingers - 1); if (!fingers) multi = false; });
+  /* tap or swipe the card stack: the card follows the finger, a pinch never shuffles */
+  var px = null, py = 0, pt = 0, dragging = false, ptrs = {}, nPtrs = 0, multi = false;
+  function zoomed() { return !!(window.visualViewport && visualViewport.scale > 1.1); }
+  function syncZoom() { stage.classList.toggle('zoomed', zoomed()); }
+  if (window.visualViewport) visualViewport.addEventListener('resize', syncZoom);
+  function settle(s) {
+    if (!s) return;
+    s.style.transition = 'transform .28s cubic-bezier(.2,.8,.2,1)';
+    s.style.transform = '';
+    setTimeout(function () { s.style.transition = ''; }, 300);
+  }
+  function forget(e) { if (ptrs[e.pointerId]) { delete ptrs[e.pointerId]; nPtrs--; } }
+  track.addEventListener('dragstart', function (e) { e.preventDefault(); });
+  track.addEventListener('pointerdown', function (e) {
+    if (mode !== 'shuffle') return;
+    if (e.isPrimary) { ptrs = {}; nPtrs = 0; multi = false; }   /* every new touch starts clean */
+    if (!ptrs[e.pointerId]) { ptrs[e.pointerId] = 1; nPtrs++; }
+    if (nPtrs > 1) { multi = true; if (dragging) settle(slides[current]); px = null; dragging = false; return; }
+    if (zoomed()) { px = null; return; }
+    px = e.clientX; py = e.clientY; pt = Date.now(); dragging = false;
+    if (e.pointerType === 'mouse') { try { track.setPointerCapture(e.pointerId); } catch (err) {} }
+  });
+  track.addEventListener('pointermove', function (e) {
+    if (px === null || multi || shuffleBusy) return;
+    var dx = e.clientX - px, dy = e.clientY - py;
+    if (!dragging && Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy)) dragging = true;
+    if (dragging && !reduce) {
+      var s = slides[current];
+      s.style.transition = 'none';
+      s.style.transform = 'translateX(' + dx + 'px) rotate(' + (dx * 0.03) + 'deg)';
+    }
+  });
+  track.addEventListener('pointercancel', function (e) {
+    forget(e);
+    if (dragging) settle(slides[current]);
+    px = null; dragging = false;
+  });
   track.addEventListener('pointerup', function (e) {
-    fingers = Math.max(0, fingers - 1);
-    var wasMulti = multi; if (!fingers) multi = false;
-    if (wasMulti || zoomed()) { px = null; return; }
-    if (mode !== 'shuffle' || px === null) return;
-    var dx = e.clientX - px; px = null;
-    if (dx < -40) step(1); else if (dx > 40) step(-1); else if (Math.abs(dx) < 8) step(1);
+    forget(e);
+    if (px === null) return;
+    var dx = e.clientX - px, dy = e.clientY - py, quick = Date.now() - pt < 300, wasDrag = dragging;
+    px = null; dragging = false;
+    var s = slides[current];
+    if (multi || zoomed() || shuffleBusy) { if (wasDrag) settle(s); return; }
+    if (wasDrag && (Math.abs(dx) > 60 || (quick && Math.abs(dx) > 25))) {
+      if (dx < 0) {   /* swipe left: this card flies off to the left from where the finger left it */
+        s.style.setProperty('--dx', dx + 'px'); s.style.setProperty('--dr', (dx * 0.03) + 'deg'); s.style.setProperty('--fx', '-1');
+        s.style.transition = ''; s.style.transform = '';
+        step(1);
+      } else {        /* swipe right: this card slides back and the previous one comes in from the left */
+        settle(s);
+        step(-1);
+      }
+    } else if (wasDrag) settle(s);
+    else if (Math.abs(dx) < 12 && Math.abs(dy) < 12) step(1);
   });
 
   if ('IntersectionObserver' in window) {

@@ -50,8 +50,8 @@
     color: var(--text);
     font-family: var(--body);
     padding-block: 12px;
-    padding-left: max(16px, env(safe-area-inset-left, 0px));
-    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-left: max(clamp(8px, 2.5vw, 16px), env(safe-area-inset-left, 0px));
+    padding-right: max(clamp(8px, 2.5vw, 16px), env(safe-area-inset-right, 0px));
     overflow: hidden;
   }
   button { font: inherit; color: inherit; }
@@ -139,8 +139,8 @@
     position: fixed; inset: 0; z-index: 20;
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; text-align: center;
     padding-block: 12px;
-    padding-left: max(16px, env(safe-area-inset-left, 0px));
-    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-left: max(clamp(8px, 2.5vw, 16px), env(safe-area-inset-left, 0px));
+    padding-right: max(clamp(8px, 2.5vw, 16px), env(safe-area-inset-right, 0px));
     transition: opacity .7s ease, transform .9s ease;
   }
   .intro[hidden] { display: none; }
@@ -186,9 +186,9 @@
   .stage.scroll .sdir { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: 18px; }
   .stage.scroll .foot, .stage.scroll .arrow { display: none; }
 
-  .stage.shuffle .track { position: relative; display: block; overflow: visible; scroll-snap-type: none; touch-action: pan-y; user-select: none; -webkit-user-select: none; cursor: pointer; }
+  .stage.shuffle .track { position: relative; display: block; overflow: visible; scroll-snap-type: none; touch-action: pan-y pinch-zoom; user-select: none; -webkit-user-select: none; cursor: pointer; }
   .stage.shuffle .slide {
-    position: absolute; inset: 0; padding: 26px 28px; scroll-snap-align: none;
+    position: absolute; inset: 0; padding: clamp(6px, 2.5vw, 26px) clamp(4px, 2.5vw, 28px); scroll-snap-align: none;
     --tx: 0px; --ty: 0px; --r: 0deg; --s: 1;
     transform: translate(var(--tx), var(--ty)) rotate(var(--r)) scale(var(--s));
     transform-origin: 50% 85%;
@@ -438,9 +438,14 @@
   Object.keys(modeBtns).forEach(function (k) { modeBtns[k].addEventListener('click', function () { setMode(k); }); });
 
   var px = null;
-  track.addEventListener('pointerdown', function (e) { if (mode === 'shuffle') px = e.clientX; });
-  track.addEventListener('pointercancel', function () { px = null; });
+  var fingers = 0, multi = false;
+  function zoomed() { return window.visualViewport && visualViewport.scale > 1.05; }
+  track.addEventListener('pointerdown', function (e) { fingers++; if (fingers > 1) multi = true; if (mode === 'shuffle') px = e.clientX; });
+  track.addEventListener('pointercancel', function () { px = null; fingers = Math.max(0, fingers - 1); if (!fingers) multi = false; });
   track.addEventListener('pointerup', function (e) {
+    fingers = Math.max(0, fingers - 1);
+    var wasMulti = multi; if (!fingers) multi = false;
+    if (wasMulti || zoomed()) { px = null; return; }
     if (mode !== 'shuffle' || px === null) return;
     var dx = e.clientX - px; px = null;
     if (dx < -40) step(1); else if (dx > 40) step(-1); else if (Math.abs(dx) < 8) step(1);

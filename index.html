@@ -186,7 +186,7 @@
   .stage.scroll .sdir { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: 18px; }
   .stage.scroll .foot, .stage.scroll .arrow { display: none; }
 
-  .stage.shuffle .track { position: relative; display: block; overflow: visible; scroll-snap-type: none; touch-action: pan-y pinch-zoom; user-select: none; -webkit-user-select: none; cursor: pointer; }
+  .stage.shuffle .track { position: relative; display: block; overflow: visible; scroll-snap-type: none; touch-action: none; user-select: none; -webkit-user-select: none; cursor: pointer; }
   .stage.shuffle .slide {
     position: absolute; inset: 0; padding: clamp(6px, 2.5vw, 26px) clamp(4px, 2.5vw, 28px); scroll-snap-align: none;
     --tx: 0px; --ty: 0px; --r: 0deg; --s: 1;
@@ -203,7 +203,9 @@
   .stage.shuffle .slide.flyin { animation: flyin 1.2s cubic-bezier(.2,.8,.2,1); }
   @keyframes fly { 0% { transform: translateX(var(--dx, 0px)) rotate(var(--dr, 0deg)); z-index: 14; } 45% { transform: translateX(calc(112% * var(--fx, 1))) rotate(calc(11deg * var(--fx, 1))); z-index: 14; } 46% { z-index: 0; } 100% { z-index: 0; } }
   @keyframes flyin { 0% { transform: translateX(-112%) rotate(-11deg); z-index: 14; } 100% { z-index: 14; } }
-  .stage.shuffle.zoomed .track { touch-action: manipulation; cursor: auto; }
+  .stage.shuffle .slide.zoomed-in { overflow: hidden; }
+  .track.ptr:focus-visible { outline: none; }
+  .stage.shuffle.cardzoom .track { cursor: grab; }
   .stage.shuffle .shufflehint { display: block; text-align: center; font-size: 12px; letter-spacing: .1em; color: var(--gold-soft); opacity: .8; margin: 0; }
 
   .modes { position: relative; min-height: 36px; }
@@ -365,6 +367,7 @@
     return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(s.dataset.q);
   }
   function setActive(i, dir, prev) {
+    resetZoom(false);
     current = i;
     tabs.forEach(function (t, k) {
       if (k === i) t.setAttribute('aria-current', 'true'); else t.removeAttribute('aria-current');
@@ -408,6 +411,7 @@
     });
   });
   track.addEventListener('keydown', function (e) {
+    track.classList.remove('ptr');
     if (mode === 'scroll') return;
     if (e.key === 'ArrowRight') { e.preventDefault(); step(1); }
     if (e.key === 'ArrowLeft') { e.preventDefault(); step(-1); }
@@ -447,51 +451,98 @@
   }
   Object.keys(modeBtns).forEach(function (k) { modeBtns[k].addEventListener('click', function () { setMode(k); }); });
 
-  /* tap or swipe the card stack: the card follows the finger, a pinch never shuffles */
-  var px = null, py = 0, pt = 0, dragging = false, ptrs = {}, nPtrs = 0, multi = false;
-  function zoomed() { return !!(window.visualViewport && visualViewport.scale > 1.1); }
-  function syncZoom() { stage.classList.toggle('zoomed', zoomed()); }
-  if (window.visualViewport) visualViewport.addEventListener('resize', syncZoom);
+  /* card stack gestures, all handled here so every phone behaves the same:
+     one finger: tap = next card, swipe = next/previous (the card follows the finger);
+     two fingers: pinch to zoom the card; while zoomed, one finger moves around and a tap zooms back out */
+  var pts = {}, nPts = 0, gesture = null, sx = 0, sy = 0, st = 0;
+  var z = 1, tx = 0, ty = 0, z0 = 1, t0x = 0, t0y = 0, d0 = 1, m0x = 0, m0y = 0, cx = 0, cy = 0;
+  var MAXZ = 4, hintEl = document.querySelector('.shufflehint'), hintText = hintEl ? hintEl.textContent : '';
+  function cardImg() { return slides[current].querySelector('img'); }
+  function drawn(im) {   /* size of the card as drawn inside its box (object-fit: contain) */
+    var bw = im.offsetWidth, bh = im.offsetHeight, ar = (im.naturalWidth || 2) / (im.naturalHeight || 3);
+    var dw = Math.min(bw, bh * ar); return { bw: bw, bh: bh, dw: dw, dh: dw / ar };
+  }
+  function clampPan() {
+    var d = drawn(cardImg());
+    var mx = Math.max(0, (d.dw * z - d.bw) / 2), my = Math.max(0, (d.dh * z - d.bh) / 2);
+    tx = Math.max(-mx, Math.min(mx, tx)); ty = Math.max(-my, Math.min(my, ty));
+  }
+  function applyZoom(animate) {
+    var im = cardImg();
+    im.style.transition = animate ? 'transform .25s ease' : 'none';
+    im.style.transform = z > 1 ? 'translate(' + tx + 'px,' + ty + 'px) scale(' + z + ')' : '';
+    slides[current].classList.toggle('zoomed-in', z > 1);
+    stage.classList.toggle('cardzoom', z > 1);
+    if (hintEl) hintEl.textContent = z > 1 ? 'Drag to move around \u00b7 tap to zoom out' : hintText;
+  }
+  function resetZoom(animate) { if (z === 1 && !tx && !ty) return; z = 1; tx = 0; ty = 0; applyZoom(animate); }
+  function centre() {   /* untransformed centre of the card on screen */
+    var r = cardImg().getBoundingClientRect(); cx = r.left + r.width / 2 - tx; cy = r.top + r.height / 2 - ty;
+  }
   function settle(s) {
     if (!s) return;
     s.style.transition = 'transform .28s cubic-bezier(.2,.8,.2,1)';
     s.style.transform = '';
     setTimeout(function () { s.style.transition = ''; }, 300);
   }
-  function forget(e) { if (ptrs[e.pointerId]) { delete ptrs[e.pointerId]; nPtrs--; } }
+  function two() { var k = Object.keys(pts); return [pts[k[0]], pts[k[1]]]; }
+  function startPinch() {
+    var p = two(); d0 = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y) || 1;
+    m0x = (p[0].x + p[1].x) / 2; m0y = (p[0].y + p[1].y) / 2; z0 = z; t0x = tx; t0y = ty; centre();
+  }
+  function startOne(x, y) { sx = x; sy = y; st = Date.now(); t0x = tx; t0y = ty; }
   track.addEventListener('dragstart', function (e) { e.preventDefault(); });
+  track.addEventListener('gesturestart', function (e) { e.preventDefault(); });   /* older iPhones: no page zoom on the card */
   track.addEventListener('pointerdown', function (e) {
+    track.classList.add('ptr');
     if (mode !== 'shuffle') return;
-    if (e.isPrimary) { ptrs = {}; nPtrs = 0; multi = false; }   /* every new touch starts clean */
-    if (!ptrs[e.pointerId]) { ptrs[e.pointerId] = 1; nPtrs++; }
-    if (nPtrs > 1) { multi = true; if (dragging) settle(slides[current]); px = null; dragging = false; return; }
-    if (zoomed()) { px = null; return; }
-    px = e.clientX; py = e.clientY; pt = Date.now(); dragging = false;
+    if (e.isPrimary || !nPts) { pts = {}; nPts = 0; gesture = null; }   /* every new touch starts clean */
+    if (!pts[e.pointerId]) nPts++;
+    pts[e.pointerId] = { x: e.clientX, y: e.clientY };
     if (e.pointerType === 'mouse') { try { track.setPointerCapture(e.pointerId); } catch (err) {} }
+    if (nPts === 1) startOne(e.clientX, e.clientY);
+    else if (nPts === 2) { if (gesture === 'swipe') settle(slides[current]); gesture = 'pinch'; startPinch(); }
   });
   track.addEventListener('pointermove', function (e) {
-    if (px === null || multi || shuffleBusy) return;
-    var dx = e.clientX - px, dy = e.clientY - py;
-    if (!dragging && Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy)) dragging = true;
-    if (dragging && !reduce) {
+    if (!pts[e.pointerId]) return;
+    pts[e.pointerId] = { x: e.clientX, y: e.clientY };
+    if (gesture === 'pinch' && nPts >= 2) {
+      var p = two(), d = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y), mx = (p[0].x + p[1].x) / 2, my = (p[0].y + p[1].y) / 2;
+      z = Math.max(1, Math.min(MAXZ, z0 * d / d0));
+      tx = mx - cx - z * (m0x - cx - t0x) / z0; ty = my - cy - z * (m0y - cy - t0y) / z0;
+      clampPan(); applyZoom(false); return;
+    }
+    if (nPts !== 1) return;
+    var dx = e.clientX - sx, dy = e.clientY - sy;
+    if (z > 1 || gesture === 'pan') {
+      if (gesture === null && Math.abs(dx) + Math.abs(dy) > 6) gesture = 'pan';
+      if (gesture === 'pan') { tx = t0x + dx; ty = t0y + dy; clampPan(); applyZoom(false); }
+      return;
+    }
+    if (shuffleBusy) return;
+    if (gesture === null && Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy)) gesture = 'swipe';
+    if (gesture === 'swipe' && !reduce) {
       var s = slides[current];
       s.style.transition = 'none';
       s.style.transform = 'translateX(' + dx + 'px) rotate(' + (dx * 0.03) + 'deg)';
     }
   });
-  track.addEventListener('pointercancel', function (e) {
-    forget(e);
-    if (dragging) settle(slides[current]);
-    px = null; dragging = false;
-  });
-  track.addEventListener('pointerup', function (e) {
-    forget(e);
-    if (px === null) return;
-    var dx = e.clientX - px, dy = e.clientY - py, quick = Date.now() - pt < 300, wasDrag = dragging;
-    px = null; dragging = false;
-    var s = slides[current];
-    if (multi || zoomed() || shuffleBusy) { if (wasDrag) settle(s); return; }
-    if (wasDrag && (Math.abs(dx) > 60 || (quick && Math.abs(dx) > 25))) {
+  function lift(e, cancelled) {
+    if (!pts[e.pointerId]) return;
+    delete pts[e.pointerId]; nPts--;
+    if (gesture === 'pinch') {
+      if (nPts === 1) { var k = Object.keys(pts)[0]; startOne(pts[k].x, pts[k].y); gesture = 'pan'; }   /* one finger left: keep moving */
+      if (z < 1.08) resetZoom(true);
+      return;
+    }
+    if (nPts > 0) return;
+    var g = gesture; gesture = null;
+    var dx = e.clientX - sx, dy = e.clientY - sy, quick = Date.now() - st < 300, s = slides[current];
+    if (g === 'pan') { if (z < 1.08) resetZoom(true); return; }
+    if (cancelled) { if (g === 'swipe') settle(s); return; }
+    if (z > 1) { if (Math.abs(dx) < 12 && Math.abs(dy) < 12) resetZoom(true); return; }   /* tap while zoomed: zoom out */
+    if (shuffleBusy) { if (g === 'swipe') settle(s); return; }
+    if (g === 'swipe' && (Math.abs(dx) > 60 || (quick && Math.abs(dx) > 25))) {
       if (dx < 0) {   /* swipe left: this card flies off to the left from where the finger left it */
         s.style.setProperty('--dx', dx + 'px'); s.style.setProperty('--dr', (dx * 0.03) + 'deg'); s.style.setProperty('--fx', '-1');
         s.style.transition = ''; s.style.transform = '';
@@ -500,9 +551,11 @@
         settle(s);
         step(-1);
       }
-    } else if (wasDrag) settle(s);
+    } else if (g === 'swipe') settle(s);
     else if (Math.abs(dx) < 12 && Math.abs(dy) < 12) step(1);
-  });
+  }
+  track.addEventListener('pointerup', function (e) { lift(e, false); });
+  track.addEventListener('pointercancel', function (e) { lift(e, true); });
 
   if ('IntersectionObserver' in window) {
     var seenIO = new IntersectionObserver(function (es) {
